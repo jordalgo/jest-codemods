@@ -22,6 +22,7 @@ export default function expectJsTransfomer(fileInfo, api, options) {
     removeRequireAndImport(j, ast, SINON);
     autoMockDepedencies(j, ast);
     transformStubReturns(j, ast);
+    transformCallCountAssertions(j, ast);
 
     return finale(fileInfo, j, ast, options, sinonImport);
 }
@@ -72,6 +73,116 @@ function transformStubReturns(j, ast) {
         });
 }
 
+const TRUE_FALSE_MATCHERS = ['toBe', 'toBeTruthy', 'toBeFalsy'];
+const SINON_CALL_COUNT_METHODS = [
+    'called',
+    'calledOnce',
+    'notCalled',
+    'calledTwice',
+    'calledThrice',
+    'callCount',
+];
+
+function transformCallCountAssertions(j, ast) {
+    ast
+        .find(j.ExpressionStatement, {
+            expression: {
+                callee: {
+                    type: 'MemberExpression',
+                    property: node => {
+                        return TRUE_FALSE_MATCHERS.includes(node.name);
+                    },
+                    object: obj => {
+                        return isExpectSinonObject(obj, SINON_CALL_COUNT_METHODS);
+                    },
+                },
+            },
+        })
+        .replaceWith(path => {
+            const expectArg = getExpectArg(path.value.expression.callee.object);
+            const expectArgObject = expectArg.object;
+            const expectArgSinonMethod = expectArg.property.name;
+            let negation = isExpectNegation(path.value);
+            if (expectArgSinonMethod === 'notCalled') {
+                negation = negation ? false : true;
+            }
+
+            const createExpect = createExpectStatement.bind(
+                null,
+                j,
+                expectArgObject,
+                negation
+            );
+
+            switch (expectArgSinonMethod) {
+                case 'called':
+                case 'calledOnce':
+                case 'notCalled':
+                    return createExpect('toHaveBeenCalled');
+                case 'calledTwice':
+                    return createExpect('toHaveBeenCalledTimes', j.literal(2));
+                case 'calledThrice':
+                    return createExpect('toHaveBeenCalledTimes', j.literal(3));
+                default:
+                    // callCount
+                    return createExpect(
+                        'toHaveBeenCalledTimes',
+                        path.value.expression.arguments[0]
+                    );
+            }
+        });
+}
+
+function isExpectSinonObject(obj, sinonMethods) {
+    if (obj.type === 'CallExpression' && obj.callee.name === 'expect') {
+        const args = obj.arguments;
+        if (args.length) {
+            return (
+                args[0].type === 'MemberExpression' &&
+                sinonMethods.includes(args[0].property.name)
+            );
+        }
+        return false;
+    } else if (obj.type === 'MemberExpression') {
+        return isExpectSinonObject(obj.object, sinonMethods);
+    }
+}
+
+function getExpectArg(obj) {
+    if (obj.type === 'MemberExpression') {
+        return getExpectArg(obj.object);
+    } else {
+        return obj.arguments[0];
+    }
+}
+
+function isExpectNegation(expectStatement) {
+    const propName = expectStatement.expression.callee.property.name;
+    const hasNot =
+        expectStatement.expression.callee.object.type === 'MemberExpression' &&
+        expectStatement.expression.callee.object.property.name === 'not';
+    const assertFalsy =
+        (propName === 'toBe' &&
+            expectStatement.expression.arguments[0].value === false) ||
+        propName === 'toBeFalsy';
+    if (hasNot && assertFalsy) {
+        return false;
+    }
+    return hasNot || assertFalsy;
+}
+
+function createExpectStatement(j, expectArg, negation, assertMethod, assertArg) {
+    return j.expressionStatement(
+        j.callExpression(
+            j.memberExpression(
+                j.callExpression(j.identifier('expect'), [expectArg]),
+                j.identifier((negation ? 'not.' : '') + assertMethod)
+            ),
+            assertArg ? [assertArg] : []
+        )
+    );
+}
+
 function autoMockDepedencies(j, ast) {
     ast
         .find(j.ExpressionStatement, {
@@ -85,7 +196,7 @@ function autoMockDepedencies(j, ast) {
                     property: node => {
                         return (
                             node.type === 'Identifier' &&
-                            MATCHER_METHODS.indexOf(node.name) !== -1
+                            MATCHER_METHODS.includes(node.name)
                         );
                     },
                 },

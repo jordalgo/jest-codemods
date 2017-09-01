@@ -55,7 +55,7 @@ testChanged(
 );
 
 testChanged(
-    'converts stubbed & spied import/require dependencies',
+    'converts stub, spy, and mock import/require dependencies',
     `
     import sinon from 'sinon';
     import dep2 from 'dep2';
@@ -82,6 +82,94 @@ testChanged(
 
     test(() => {
       dep4.method2.mockReturnValue('hello');
+    });
+    `
+);
+
+testChanged(
+    'converts spy call count assertions',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+      expect(spy.called).toBe(true);
+      expect(spy.called).toBeTruthy();
+      expect(spy.called).toBe(false);
+      expect(spy.called).toBeFalsy();
+      expect(spy.called).not.toBe(true);
+      expect(spy.called).not.toBeTruthy();
+      expect(spy.called).not.toBeFalsy();
+      expect(spy.called).not.toBe(false);
+      expect(bob.spy.called).toBe(true);
+
+      expect(spy.calledOnce).toBe(true);
+      expect(spy.calledOnce).toBeTruthy();
+      expect(spy.calledOnce).toBe(false);
+      expect(spy.calledOnce).toBeFalsy();
+      expect(spy.calledOnce).not.toBe(true);
+      expect(spy.calledOnce).not.toBeTruthy();
+      expect(spy.calledOnce).not.toBeFalsy();
+      expect(spy.calledOnce).not.toBe(false);
+      expect(bob.spy.calledOnce).toBe(true);
+
+      expect(spy.notCalled).toBe(true);
+      expect(spy.notCalled).toBeTruthy();
+      expect(spy.notCalled).toBe(false);
+      expect(spy.notCalled).toBeFalsy();
+
+      expect(spy.calledTwice).toBe(true);
+      expect(spy.calledTwice).toBeTruthy();
+      expect(spy.calledTwice).not.toBe(true);
+      expect(spy.calledTwice).toBeFalsy();
+
+      expect(spy.calledThrice).toBe(true);
+      expect(spy.calledThrice).toBeTruthy();
+      expect(spy.calledThrice).not.toBe(true);
+      expect(spy.calledThrice).toBeFalsy();
+
+      expect(spy.callCount).toBe(8);
+      expect(spy.callCount).not.toBe(8);
+    });
+    `,
+    `
+    test(() => {
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalled();
+      expect(bob.spy).toHaveBeenCalled();
+
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalled();
+      expect(bob.spy).toHaveBeenCalled();
+
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalled();
+
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy).not.toHaveBeenCalledTimes(2);
+      expect(spy).not.toHaveBeenCalledTimes(2);
+
+      expect(spy).toHaveBeenCalledTimes(3);
+      expect(spy).toHaveBeenCalledTimes(3);
+      expect(spy).not.toHaveBeenCalledTimes(3);
+      expect(spy).not.toHaveBeenCalledTimes(3);
+
+      expect(spy).toHaveBeenCalledTimes(8);
+      expect(spy).not.toHaveBeenCalledTimes(8);
     });
     `
 );
