@@ -2,8 +2,6 @@ import { getRequireOrImportName, removeRequireAndImport } from '../utils/imports
 //import logger from '../utils/logger';
 import finale from '../utils/finale';
 
-const MATCHER_METHODS = ['stub', 'spy', 'mock'];
-
 const SINON = 'sinon';
 
 const autoMockedDependencies = [];
@@ -193,11 +191,9 @@ function autoMockDepedencies(j, ast) {
                     object: {
                         name: SINON,
                     },
-                    property: node => {
-                        return (
-                            node.type === 'Identifier' &&
-                            MATCHER_METHODS.includes(node.name)
-                        );
+                    property: {
+                        type: 'Identifier',
+                        name: 'stub',
                     },
                 },
                 arguments: args => {

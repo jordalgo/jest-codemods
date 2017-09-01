@@ -55,19 +55,21 @@ testChanged(
 );
 
 testChanged(
-    'converts stub, spy, and mock import/require dependencies',
+    'converts stub import/require dependencies',
     `
     import sinon from 'sinon';
     import dep2 from 'dep2';
     import * as dep3 from '../dep3';
     const dep1 = require('dep1');
     const dep4 = require('dep4');
+    const dep5 = require('dep5');
 
     test(() => {
       sinon.stub(dep2, 'method1');
-      sinon.spy(dep1, 'method2');
-      sinon.mock(dep3);
+      sinon.stub(dep1, 'method2');
+      sinon.stub(dep3, 'method3');
       sinon.stub(dep4, 'method2').returns('hello');
+      sinon.spy(dep5, 'method1');
     });
     `,
     `
@@ -79,9 +81,11 @@ testChanged(
     const dep1 = require('dep1');
     jest.mock('dep4');
     const dep4 = require('dep4');
+    const dep5 = require('dep5');
 
     test(() => {
       dep4.method2.mockReturnValue('hello');
+      sinon.spy(dep5, 'method1');
     });
     `
 );
