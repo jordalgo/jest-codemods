@@ -85,7 +85,29 @@ testChanged(
 
     test(() => {
       dep4.method2.mockReturnValue('hello');
-      sinon.spy(dep5, 'method1');
+      jest.spyOn(dep5, 'method1');
+    });
+    `
+);
+
+testChanged(
+    'converts sinon.spy(object, "method") to spyOn',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+        var spy = sinon.spy();
+        var spy = sinon.spy(fn);
+        var spy = sinon.spy(object, 'method');
+        sinon.spy(object, 'method');
+    });
+    `,
+    `
+    test(() => {
+        var spy = jest.fn();
+        var spy = jest.fn(fn);
+        var spy = jest.spyOn(object, 'method');
+        jest.spyOn(object, 'method');
     });
     `
 );

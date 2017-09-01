@@ -1,5 +1,5 @@
 import { getRequireOrImportName, removeRequireAndImport } from '../utils/imports';
-//import logger from '../utils/logger';
+import logger from '../utils/logger';
 import finale from '../utils/finale';
 
 const SINON = 'sinon';
@@ -10,7 +10,7 @@ export default function expectJsTransfomer(fileInfo, api, options) {
     const j = api.jscodeshift;
     const ast = j(fileInfo.source);
     const sinonImport = getRequireOrImportName(j, ast, SINON);
-    //const logWarning = (msg, node) => logger(fileInfo, msg, node);
+    const logWarning = (msg, node) => logger(fileInfo, msg, node);
 
     if (!sinonImport) {
         // No sinon require/import were found
@@ -21,8 +21,41 @@ export default function expectJsTransfomer(fileInfo, api, options) {
     autoMockDepedencies(j, ast);
     transformStubReturns(j, ast);
     transformCallCountAssertions(j, ast);
+    transformSpyCreation(j, ast, logWarning);
 
     return finale(fileInfo, j, ast, options, sinonImport);
+}
+
+function transformSpyCreation(j, ast, logWarning) {
+    ast
+        .find(j.CallExpression, {
+            callee: {
+                object: {
+                    name: SINON,
+                },
+                property: {
+                    name: 'spy',
+                },
+            },
+        })
+        .replaceWith(path => {
+            switch (path.value.arguments.length) {
+                case 0:
+                    return j.callExpression(j.identifier('jest.fn'), []);
+                case 1:
+                    return j.callExpression(
+                        j.identifier('jest.fn'),
+                        path.value.arguments
+                    );
+                case 2:
+                    return j.callExpression(
+                        j.identifier('jest.spyOn'),
+                        path.value.arguments
+                    );
+                default:
+                    return path.value;
+            }
+        });
 }
 
 function transformStubReturns(j, ast) {
