@@ -1,5 +1,5 @@
 import { getRequireOrImportName, removeRequireAndImport } from '../utils/imports';
-import logger from '../utils/logger';
+//import logger from '../utils/logger';
 import finale from '../utils/finale';
 
 const SINON = 'sinon';
@@ -10,7 +10,7 @@ export default function expectJsTransfomer(fileInfo, api, options) {
     const j = api.jscodeshift;
     const ast = j(fileInfo.source);
     const sinonImport = getRequireOrImportName(j, ast, SINON);
-    const logWarning = (msg, node) => logger(fileInfo, msg, node);
+    //const logWarning = (msg, node) => logger(fileInfo, msg, node);
 
     if (!sinonImport) {
         // No sinon require/import were found
@@ -21,12 +21,85 @@ export default function expectJsTransfomer(fileInfo, api, options) {
     autoMockDepedencies(j, ast);
     transformStubReturns(j, ast);
     transformCallCountAssertions(j, ast);
-    transformSpyCreation(j, ast, logWarning);
+    transformSpyCreation(j, ast);
+    transformGetCallMethos(j, ast);
 
     return finale(fileInfo, j, ast, options, sinonImport);
 }
 
-function transformSpyCreation(j, ast, logWarning) {
+function transformGetCallMethos(j, ast) {
+    const getCallMethods = {
+        firstCall: 'firstCall',
+        secondCall: 'secondCall',
+        thirdCall: 'thirdCall',
+        lastCall: 'lastCall',
+    };
+    const methods = Object.keys(getCallMethods);
+    const MOCK_CALLS = 'mock.calls';
+    const createJestGetCall = (obj, callArg) => {
+        return j.memberExpression(
+            j.memberExpression(obj, j.identifier(MOCK_CALLS)),
+            callArg,
+            true
+        );
+    };
+
+    ast
+        .find(j.MemberExpression, {
+            property: {
+                name: name => methods.includes(name),
+            },
+        })
+        .replaceWith(path => {
+            const obj = path.value.object;
+            switch (path.value.property.name) {
+                case getCallMethods.firstCall:
+                    return createJestGetCall(obj, j.literal(0));
+                case getCallMethods.secondCall:
+                    return createJestGetCall(obj, j.literal(1));
+                case getCallMethods.thirdCall:
+                    return createJestGetCall(obj, j.literal(2));
+                default:
+                    return createJestGetCall(
+                        obj,
+                        j.binaryExpression(
+                            '-',
+                            j.memberExpression(
+                                j.memberExpression(obj, j.identifier(MOCK_CALLS)),
+                                j.identifier('length')
+                            ),
+                            j.literal(1)
+                        )
+                    );
+            }
+        });
+
+    ast
+        .find(j.CallExpression, {
+            callee: {
+                property: {
+                    name: 'getCalls',
+                },
+            },
+        })
+        .replaceWith(path => {
+            return j.memberExpression(path.value.callee.object, j.identifier(MOCK_CALLS));
+        });
+
+    ast
+        .find(j.CallExpression, {
+            callee: {
+                property: {
+                    name: 'getCall',
+                },
+            },
+        })
+        .replaceWith(path => {
+            return createJestGetCall(path.value.callee.object, path.value.arguments[0]);
+        });
+}
+
+function transformSpyCreation(j, ast) {
     ast
         .find(j.CallExpression, {
             callee: {

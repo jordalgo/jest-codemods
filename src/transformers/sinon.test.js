@@ -199,3 +199,31 @@ testChanged(
     });
     `
 );
+
+testChanged(
+    'converts get call methods',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+        expect(spy.firstCall).toBeTruthy();
+        expect(spy.secondCall).toBeTruthy();
+        expect(spy.thirdCall).toBeTruthy();
+        expect(spy.lastCall).toBeTruthy();
+        var spyCalls = spy.getCalls();
+        var spyCall4 = spy.getCall(4);
+        var spyCall = spy.getCall(n);
+    });
+    `,
+    `
+    test(() => {
+        expect(spy.mock.calls[0]).toBeTruthy();
+        expect(spy.mock.calls[1]).toBeTruthy();
+        expect(spy.mock.calls[2]).toBeTruthy();
+        expect(spy.mock.calls[spy.mock.calls.length - 1]).toBeTruthy();
+        var spyCalls = spy.mock.calls;
+        var spyCall4 = spy.mock.calls[4];
+        var spyCall = spy.mock.calls[n];
+    });
+    `
+);
