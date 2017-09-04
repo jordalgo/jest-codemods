@@ -21,6 +21,7 @@ export default function expectJsTransfomer(fileInfo, api, options) {
     autoMockDepedencies(j, ast);
     transformStubReturns(j, ast);
     transformCallCountAssertions(j, ast);
+    transformCalledWithAssertions(j, ast);
     transformSpyCreation(j, ast);
     transformGetCallMethos(j, ast);
 
@@ -177,6 +178,49 @@ function transformStubReturns(j, ast) {
         });
 }
 
+const SINON_CALLED_WITH_METHODS = ['calledWith', 'notCalledWith'];
+
+function transformCalledWithAssertions(j, ast) {
+    ast
+        .find(j.ExpressionStatement, {
+            expression: {
+                callee: {
+                    type: 'MemberExpression',
+                    property: node => {
+                        return TRUE_FALSE_MATCHERS.includes(node.name);
+                    },
+                    object: obj => {
+                        return isExpectSinonCall(obj, SINON_CALLED_WITH_METHODS);
+                    },
+                },
+            },
+        })
+        .replaceWith(path => {
+            const expectArg = getExpectArg(path.value.expression.callee.object);
+            const expectArgObject = expectArg.callee.object;
+            const expectArgSinonMethod = expectArg.callee.property.name;
+            let negation = isExpectNegation(path.value);
+            if (expectArgSinonMethod === 'notCalledWith') {
+                negation = negation ? false : true;
+            }
+
+            const createExpect = createExpectStatement.bind(
+                null,
+                j,
+                expectArgObject,
+                negation
+            );
+
+            switch (expectArgSinonMethod) {
+                case 'calledWith':
+                case 'notCalledWith':
+                    return createExpect('toHaveBeenCalledWith', expectArg.arguments);
+                default:
+                    path.value;
+            }
+        });
+}
+
 const TRUE_FALSE_MATCHERS = ['toBe', 'toBeTruthy', 'toBeFalsy'];
 const SINON_CALL_COUNT_METHODS = [
     'called',
@@ -224,17 +268,33 @@ function transformCallCountAssertions(j, ast) {
                 case 'notCalled':
                     return createExpect('toHaveBeenCalled');
                 case 'calledTwice':
-                    return createExpect('toHaveBeenCalledTimes', j.literal(2));
+                    return createExpect('toHaveBeenCalledTimes', [j.literal(2)]);
                 case 'calledThrice':
-                    return createExpect('toHaveBeenCalledTimes', j.literal(3));
+                    return createExpect('toHaveBeenCalledTimes', [j.literal(3)]);
                 default:
                     // callCount
                     return createExpect(
                         'toHaveBeenCalledTimes',
-                        path.value.expression.arguments[0]
+                        path.value.expression.arguments
                     );
             }
         });
+}
+
+function isExpectSinonCall(obj, sinonMethods) {
+    if (obj.type === 'CallExpression' && obj.callee.name === 'expect') {
+        const args = obj.arguments;
+        if (args.length) {
+            return (
+                args[0].type === 'CallExpression' &&
+                args[0].callee.type === 'MemberExpression' &&
+                sinonMethods.includes(args[0].callee.property.name)
+            );
+        }
+        return false;
+    } else if (obj.type === 'MemberExpression') {
+        return isExpectSinonObject(obj.object, sinonMethods);
+    }
 }
 
 function isExpectSinonObject(obj, sinonMethods) {
@@ -275,14 +335,14 @@ function isExpectNegation(expectStatement) {
     return hasNot || assertFalsy;
 }
 
-function createExpectStatement(j, expectArg, negation, assertMethod, assertArg) {
+function createExpectStatement(j, expectArg, negation, assertMethod, assertArgs) {
     return j.expressionStatement(
         j.callExpression(
             j.memberExpression(
                 j.callExpression(j.identifier('expect'), [expectArg]),
                 j.identifier((negation ? 'not.' : '') + assertMethod)
             ),
-            assertArg ? [assertArg] : []
+            assertArgs ? assertArgs : []
         )
     );
 }

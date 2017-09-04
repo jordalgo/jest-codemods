@@ -227,3 +227,27 @@ testChanged(
     });
     `
 );
+
+testChanged(
+    'converts calledWith methods',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+        expect(spy.calledWith(1, 2, 3)).toBe(true);
+        expect(spy.calledWith(1, 2, 3)).toBeTruthy();
+
+        expect(spy.notCalledWith(1, 2, 3)).toBe(true);
+        expect(spy.notCalledWith(1, 2, 3)).toBeTruthy();
+    });
+    `,
+    `
+    test(() => {
+        expect(spy).toHaveBeenCalledWith(1, 2, 3);
+        expect(spy).toHaveBeenCalledWith(1, 2, 3);
+
+        expect(spy).not.toHaveBeenCalledWith(1, 2, 3);
+        expect(spy).not.toHaveBeenCalledWith(1, 2, 3);
+    });
+    `
+);
