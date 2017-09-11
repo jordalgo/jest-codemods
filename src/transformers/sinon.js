@@ -2,6 +2,8 @@ import { getRequireOrImportName, removeRequireAndImport } from '../utils/imports
 //import logger from '../utils/logger';
 import finale from '../utils/finale';
 
+// Todos: window functions should be global
+
 const SINON = 'sinon';
 
 const autoMockedDependencies = [];
@@ -19,13 +21,97 @@ export default function expectJsTransfomer(fileInfo, api, options) {
 
     removeRequireAndImport(j, ast, SINON);
     autoMockDepedencies(j, ast);
-    transformStubReturns(j, ast);
     transformCallCountAssertions(j, ast);
     transformCalledWithAssertions(j, ast);
     transformSpyCreation(j, ast);
     transformGetCallMethos(j, ast);
+    transformStubCreation(j, ast);
 
     return finale(fileInfo, j, ast, options, sinonImport);
+}
+
+function transformStubCreation(j, ast) {
+    ast
+        .find(j.ExpressionStatement, {
+            expression: {
+                type: 'CallExpression',
+                callee: isSinonStubCall,
+            },
+        })
+        .replaceWith(path => {
+            return j.expressionStatement(createJestSpyCall(j, path.value.expression));
+        });
+
+    ast
+        .find(j.VariableDeclarator, {
+            init: {
+                type: 'CallExpression',
+                callee: isSinonStubCall,
+            },
+        })
+        .replaceWith(path => {
+            // find the variables that specify return values e.g. stub2.returns('bye');
+            ast
+                .find(j.CallExpression, {
+                    callee: {
+                        type: 'MemberExpression',
+                        object: {
+                            name: path.value.id.name,
+                        },
+                    },
+                })
+                .replaceWith(subPath => {
+                    return j.callExpression(
+                        j.memberExpression(
+                            subPath.value.callee.object,
+                            j.identifier('mockReturnValue')
+                        ),
+                        subPath.value.arguments
+                    );
+                });
+
+            return j.variableDeclarator(
+                path.value.id,
+                createJestSpyCall(j, path.value.init)
+            );
+        });
+}
+
+function isSinonStubCall(callee) {
+    if (callee.object && callee.object.type === 'CallExpression') {
+        return isSinonStubCall(callee.object.callee);
+    }
+    if (
+        callee.type === 'MemberExpression' &&
+        callee.object.name === SINON &&
+        callee.property.name === 'stub'
+    ) {
+        return true;
+    }
+    return false;
+}
+
+function createJestSpyCall(j, callExpression) {
+    const callee = callExpression.callee;
+    const args = callExpression.arguments;
+    if (callee.object.type === 'CallExpression') {
+        if (callee.property && callee.property.name === 'returns') {
+            return j.callExpression(
+                j.memberExpression(
+                    j.callExpression(j.identifier('jest.spyOn'), callee.object.arguments),
+                    j.identifier('mockReturnValue')
+                ),
+                args
+            );
+        }
+    }
+    return j.callExpression(
+        j.memberExpression(
+            j.callExpression(j.identifier('jest.spyOn'), args),
+            j.identifier('mockReturnValue')
+        ),
+        [j.identifier('undefined')]
+    );
 }
 
 function transformGetCallMethos(j, ast) {
@@ -129,52 +215,6 @@ function transformSpyCreation(j, ast) {
                 default:
                     return path.value;
             }
-        });
-}
-
-function transformStubReturns(j, ast) {
-    ast
-        .find(j.ExpressionStatement, {
-            expression: {
-                type: 'CallExpression',
-                callee: {
-                    type: 'MemberExpression',
-                    object: {
-                        callee: {
-                            type: 'MemberExpression',
-                            object: {
-                                name: SINON,
-                            },
-                            property: {
-                                name: 'stub',
-                            },
-                        },
-                        arguments: args => {
-                            return args.length !== 0;
-                        },
-                    },
-                    property: {
-                        name: 'returns',
-                    },
-                },
-            },
-        })
-        .replaceWith(path => {
-            // also create the auto mock if needed
-            const dep = path.value.expression.callee.object.arguments[0];
-            const depMethod = path.value.expression.callee.object.arguments[1];
-            autoMockImport(j, ast, dep.name);
-            autoMockRequire(j, ast, dep.name);
-
-            return j.expressionStatement(
-                j.callExpression(
-                    j.memberExpression(
-                        j.memberExpression(dep, j.identifier(depMethod.value)),
-                        j.identifier('mockReturnValue')
-                    ),
-                    path.value.expression.arguments
-                )
-            );
         });
 }
 

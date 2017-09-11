@@ -55,37 +55,25 @@ testChanged(
 );
 
 testChanged(
-    'converts stub import/require dependencies',
+    'converts sinon.stub(object, "method") to spyOn with mockImplementation',
     `
     import sinon from 'sinon';
-    import dep2 from 'dep2';
-    import * as dep3 from '../dep3';
-    const dep1 = require('dep1');
-    const dep4 = require('dep4');
-    const dep5 = require('dep5');
 
     test(() => {
-      sinon.stub(dep2, 'method1');
-      sinon.stub(dep1, 'method2');
-      sinon.stub(dep3, 'method3');
-      sinon.stub(dep4, 'method2').returns('hello');
-      sinon.spy(dep5, 'method1');
+        sinon.stub(obj, 'method1');
+        sinon.stub(obj, 'method2').returns('hello');
+        var stub = sinon.stub(obj, 'method3');
+        var stub2 = sinon.stub(obj, 'method4');
+        stub2.returns('bye');
     });
     `,
     `
-    jest.mock('dep2');
-    import dep2 from 'dep2';
-    jest.mock('../dep3');
-    import * as dep3 from '../dep3';
-    jest.mock('dep1');
-    const dep1 = require('dep1');
-    jest.mock('dep4');
-    const dep4 = require('dep4');
-    const dep5 = require('dep5');
-
     test(() => {
-      dep4.method2.mockReturnValue('hello');
-      jest.spyOn(dep5, 'method1');
+        jest.spyOn(obj, 'method1').mockReturnValue(undefined);
+        jest.spyOn(obj, 'method2').mockReturnValue('hello');
+        var stub = jest.spyOn(obj, 'method3').mockReturnValue(undefined);
+        var stub2 = jest.spyOn(obj, 'method4').mockReturnValue(undefined);
+        stub2.mockReturnValue('bye');
     });
     `
 );
