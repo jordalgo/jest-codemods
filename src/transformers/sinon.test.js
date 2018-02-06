@@ -55,7 +55,7 @@ testChanged(
 );
 
 testChanged(
-    'converts sinon.stub(object, "method") to spyOn with mockImplementation',
+    'converts sinon.stub(object, "method") to spyOn',
     `
     import sinon from 'sinon';
 
@@ -64,6 +64,8 @@ testChanged(
         sinon.stub(obj, 'method2').returns('hello');
         var stub = sinon.stub(obj, 'method3');
         var stub2 = sinon.stub(obj, 'method4');
+        var stub3 = sinon.stub();
+        var stub4 = sinon.stub().returns('hello');
         stub2.returns('bye');
     });
     `,
@@ -73,6 +75,8 @@ testChanged(
         jest.spyOn(obj, 'method2').mockReturnValue('hello');
         var stub = jest.spyOn(obj, 'method3').mockReturnValue(undefined);
         var stub2 = jest.spyOn(obj, 'method4').mockReturnValue(undefined);
+        var stub3 = jest.fn();
+        var stub4 = jest.fn().mockReturnValue('hello');
         stub2.mockReturnValue('bye');
     });
     `

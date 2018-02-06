@@ -19,15 +19,98 @@ export default function expectJsTransfomer(fileInfo, api, options) {
         return fileInfo.source;
     }
 
-    removeRequireAndImport(j, ast, SINON);
-    autoMockDepedencies(j, ast);
-    transformCallCountAssertions(j, ast);
-    transformCalledWithAssertions(j, ast);
-    transformSpyCreation(j, ast);
-    transformGetCallMethos(j, ast);
-    transformStubCreation(j, ast);
+    [
+        removeRequireAndImport,
+        autoMockDepedencies,
+        transformCallCountAssertions,
+        transformCalledWithAssertions,
+        transformSpyCreation,
+        transformStubCreation,
+        transformGetCallMethos,
+    ].forEach(fn => {
+        fn(j, ast, SINON);
+    });
 
     return finale(fileInfo, j, ast, options, sinonImport);
+}
+
+function autoMockDepedencies(j, ast) {
+    ast
+        .find(j.ExpressionStatement, {
+            expression: {
+                type: 'CallExpression',
+                callee: {
+                    type: 'MemberExpression',
+                    object: {
+                        name: SINON,
+                    },
+                    property: {
+                        type: 'Identifier',
+                        name: 'stub',
+                    },
+                },
+                arguments: args => {
+                    return args.length !== 0;
+                },
+            },
+        })
+        .filter(path => {
+            const dep = path.value.expression.arguments[0].name;
+            if (autoMockImport(j, ast, dep)) {
+                return true;
+            }
+            if (autoMockRequire(j, ast, dep)) {
+                return true;
+            }
+            return false;
+        })
+        .remove();
+}
+
+function autoMockImport(j, ast, dep) {
+    let foundImportedDep = false;
+    ast
+        .find(j.ImportDeclaration, {
+            specifiers: specifiers => {
+                return specifiers.some(s => s.local.name === dep);
+            },
+        })
+        .forEach(path => {
+            foundImportedDep = true;
+            // don't create the auto mock more than once
+            if (autoMockedDependencies.indexOf(dep) === -1) {
+                autoMockedDependencies.push(dep);
+                path.insertBefore(createJestMock(j, path.value.source));
+            }
+        });
+    return foundImportedDep;
+}
+
+function autoMockRequire(j, ast, dep) {
+    let foundRequiredDep = false;
+    ast
+        .find(j.VariableDeclaration, {
+            declarations: declarations => {
+                return declarations.some(dec => {
+                    return isRequireCall(dec, dep);
+                });
+            },
+        })
+        .forEach(path => {
+            const pathArg = path.value.declarations.reduce((acc, dec) => {
+                if (isRequireCall(dec, dep)) {
+                    return dec.init.arguments[0];
+                }
+                return acc;
+            }, false);
+            foundRequiredDep = true;
+            // don't create the auto mock more than once
+            if (autoMockedDependencies.indexOf(dep) === -1) {
+                autoMockedDependencies.push(dep);
+                path.insertBefore(createJestMock(j, pathArg));
+            }
+        });
+    return foundRequiredDep;
 }
 
 function transformStubCreation(j, ast) {
@@ -96,22 +179,36 @@ function createJestSpyCall(j, callExpression) {
     const args = callExpression.arguments;
     if (callee.object.type === 'CallExpression') {
         if (callee.property && callee.property.name === 'returns') {
-            return j.callExpression(
-                j.memberExpression(
-                    j.callExpression(j.identifier('jest.spyOn'), callee.object.arguments),
-                    j.identifier('mockReturnValue')
-                ),
-                args
-            );
+            if (callee.object.arguments.length) {
+                return j.callExpression(
+                    j.memberExpression(
+                        j.callExpression(
+                            j.identifier('jest.spyOn'),
+                            callee.object.arguments
+                        ),
+                        j.identifier('mockReturnValue')
+                    ),
+                    args
+                );
+            } else {
+                return j.callExpression(
+                    j.memberExpression(createJestFn(j), j.identifier('mockReturnValue')),
+                    args
+                );
+            }
         }
     }
-    return j.callExpression(
-        j.memberExpression(
-            j.callExpression(j.identifier('jest.spyOn'), args),
-            j.identifier('mockReturnValue')
-        ),
-        [j.identifier('undefined')]
-    );
+    if (args.length) {
+        return j.callExpression(
+            j.memberExpression(
+                j.callExpression(j.identifier('jest.spyOn'), args),
+                j.identifier('mockReturnValue')
+            ),
+            [j.identifier('undefined')]
+        );
+    } else {
+        return createJestFn(j);
+    }
 }
 
 function transformGetCallMethos(j, ast) {
@@ -387,41 +484,12 @@ function createExpectStatement(j, expectArg, negation, assertMethod, assertArgs)
     );
 }
 
-function autoMockDepedencies(j, ast) {
-    ast
-        .find(j.ExpressionStatement, {
-            expression: {
-                type: 'CallExpression',
-                callee: {
-                    type: 'MemberExpression',
-                    object: {
-                        name: SINON,
-                    },
-                    property: {
-                        type: 'Identifier',
-                        name: 'stub',
-                    },
-                },
-                arguments: args => {
-                    return args.length !== 0;
-                },
-            },
-        })
-        .filter(path => {
-            const dep = path.value.expression.arguments[0].name;
-            if (autoMockImport(j, ast, dep)) {
-                return true;
-            }
-            if (autoMockRequire(j, ast, dep)) {
-                return true;
-            }
-            return false;
-        })
-        .remove();
-}
-
 function createJestMock(j, pathArg) {
     return j.expressionStatement(j.callExpression(j.identifier('jest.mock'), [pathArg]));
+}
+
+function createJestFn(j) {
+    return j.callExpression(j.identifier('jest.fn'), []);
 }
 
 function isRequireCall(declaration, varName) {
@@ -430,50 +498,4 @@ function isRequireCall(declaration, varName) {
         declaration.init.type === 'CallExpression' &&
         declaration.init.callee.name === 'require'
     );
-}
-
-function autoMockImport(j, ast, dep) {
-    let foundImportedDep = false;
-    ast
-        .find(j.ImportDeclaration, {
-            specifiers: specifiers => {
-                return specifiers.some(s => s.local.name === dep);
-            },
-        })
-        .forEach(path => {
-            foundImportedDep = true;
-            // don't create the auto mock more than once
-            if (autoMockedDependencies.indexOf(dep) === -1) {
-                autoMockedDependencies.push(dep);
-                path.insertBefore(createJestMock(j, path.value.source));
-            }
-        });
-    return foundImportedDep;
-}
-
-function autoMockRequire(j, ast, dep) {
-    let foundRequiredDep = false;
-    ast
-        .find(j.VariableDeclaration, {
-            declarations: declarations => {
-                return declarations.some(dec => {
-                    return isRequireCall(dec, dep);
-                });
-            },
-        })
-        .forEach(path => {
-            const pathArg = path.value.declarations.reduce((acc, dec) => {
-                if (isRequireCall(dec, dep)) {
-                    return dec.init.arguments[0];
-                }
-                return acc;
-            }, false);
-            foundRequiredDep = true;
-            // don't create the auto mock more than once
-            if (autoMockedDependencies.indexOf(dep) === -1) {
-                autoMockedDependencies.push(dep);
-                path.insertBefore(createJestMock(j, pathArg));
-            }
-        });
-    return foundRequiredDep;
 }
