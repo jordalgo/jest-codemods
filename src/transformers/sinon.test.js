@@ -55,6 +55,22 @@ testChanged(
 );
 
 testChanged(
+    'converts sinon.mock() to jest.fn()',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+        var a = sinon.mock();
+    });
+    `,
+    `
+    test(() => {
+        var a = jest.fn();
+    });
+    `
+);
+
+testChanged(
     'converts sinon.stub(object, "method") to spyOn',
     `
     import sinon from 'sinon';
@@ -205,6 +221,18 @@ testChanged(
         var spyCalls = spy.getCalls();
         var spyCall4 = spy.getCall(4);
         var spyCall = spy.getCall(n);
+
+        var args = spy.getCall(0).args;
+        var arg1 = spy.getCall(0).args[0];
+        expect(spy.getCall(0).args[0]).toBe(1);
+        expect(spy.firstCall.args).toBe(x);
+        expect(spy.secondCall.args).toBe(x);
+        expect(spy.thirdCall.args).toBe(x);
+        expect(spy.lastCall.args).toBe(x);
+        expect(spy.firstCall.args[0]).toBe(x);
+        expect(spy.secondCall.args[0]).toBe(x);
+        expect(spy.thirdCall.args[0]).toBe(x);
+        expect(spy.lastCall.args[0]).toBe(x);
     });
     `,
     `
@@ -216,6 +244,18 @@ testChanged(
         var spyCalls = spy.mock.calls;
         var spyCall4 = spy.mock.calls[4];
         var spyCall = spy.mock.calls[n];
+
+        var args = spy.mock.calls[0];
+        var arg1 = spy.mock.calls[0][0];
+        expect(spy.mock.calls[0][0]).toBe(1);
+        expect(spy.mock.calls[0]).toBe(x);
+        expect(spy.mock.calls[1]).toBe(x);
+        expect(spy.mock.calls[2]).toBe(x);
+        expect(spy.mock.calls[spy.mock.calls.length - 1]).toBe(x);
+        expect(spy.mock.calls[0][0]).toBe(x);
+        expect(spy.mock.calls[1][0]).toBe(x);
+        expect(spy.mock.calls[2][0]).toBe(x);
+        expect(spy.mock.calls[spy.mock.calls.length - 1][0]).toBe(x);
     });
     `
 );

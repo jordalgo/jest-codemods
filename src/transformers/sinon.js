@@ -22,6 +22,7 @@ export default function expectJsTransfomer(fileInfo, api, options) {
     [
         removeRequireAndImport,
         autoMockDepedencies,
+        transformSinonMock,
         transformCallCountAssertions,
         transformCalledWithAssertions,
         transformSpyCreation,
@@ -111,6 +112,23 @@ function autoMockRequire(j, ast, dep) {
             }
         });
     return foundRequiredDep;
+}
+
+function transformSinonMock(j, ast) {
+    ast
+        .find(j.CallExpression, {
+            callee: {
+                object: {
+                    name: SINON,
+                },
+                property: {
+                    name: 'mock',
+                },
+            },
+        })
+        .replaceWith(path => {
+            return j.callExpression(j.identifier('jest.fn'), []);
+        });
 }
 
 function transformStubCreation(j, ast) {
@@ -228,6 +246,45 @@ function transformGetCallMethos(j, ast) {
         );
     };
 
+    // remove `.args` from these type of sinon call methods
+    ast
+        .find(j.MemberExpression, {
+            object: {
+                type: 'MemberExpression',
+                property: {
+                    name: name => methods.includes(name),
+                },
+            },
+            property: {
+                type: 'Identifier',
+                name: 'args',
+            },
+        })
+        .replaceWith(path => {
+            return path.value.object;
+        });
+
+    ast
+        .find(j.MemberExpression, {
+            object: {
+                type: 'CallExpression',
+                callee: {
+                    type: 'MemberExpression',
+                    property: {
+                        name: 'getCall',
+                    },
+                },
+            },
+            property: {
+                type: 'Identifier',
+                name: 'args',
+            },
+        })
+        .replaceWith(path => {
+            return path.value.object;
+        });
+
+    // now replace the call methods
     ast
         .find(j.MemberExpression, {
             property: {
