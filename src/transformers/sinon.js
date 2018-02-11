@@ -5,8 +5,16 @@ import finale from '../utils/finale';
 // Todos: window functions should be global
 
 const SINON = 'sinon';
-
-const autoMockedDependencies = [];
+const SINON_CALLED_WITH_METHODS = ['calledWith', 'notCalledWith'];
+const TRUE_FALSE_MATCHERS = ['toBe', 'toBeTruthy', 'toBeFalsy'];
+const SINON_CALL_COUNT_METHODS = [
+    'called',
+    'calledOnce',
+    'notCalled',
+    'calledTwice',
+    'calledThrice',
+    'callCount',
+];
 
 export default function expectJsTransfomer(fileInfo, api, options) {
     const j = api.jscodeshift;
@@ -19,9 +27,9 @@ export default function expectJsTransfomer(fileInfo, api, options) {
         return fileInfo.source;
     }
 
+    removeRequireAndImport(j, ast, SINON);
+
     [
-        removeRequireAndImport,
-        autoMockDepedencies,
         transformSinonMock,
         transformCallCountAssertions,
         transformCalledWithAssertions,
@@ -29,91 +37,17 @@ export default function expectJsTransfomer(fileInfo, api, options) {
         transformStubCreation,
         transformGetCallMethos,
     ].forEach(fn => {
-        fn(j, ast, SINON);
+        fn(j, ast);
     });
 
     return finale(fileInfo, j, ast, options, sinonImport);
 }
 
-function autoMockDepedencies(j, ast) {
-    ast
-        .find(j.ExpressionStatement, {
-            expression: {
-                type: 'CallExpression',
-                callee: {
-                    type: 'MemberExpression',
-                    object: {
-                        name: SINON,
-                    },
-                    property: {
-                        type: 'Identifier',
-                        name: 'stub',
-                    },
-                },
-                arguments: args => {
-                    return args.length !== 0;
-                },
-            },
-        })
-        .filter(path => {
-            const dep = path.value.expression.arguments[0].name;
-            if (autoMockImport(j, ast, dep)) {
-                return true;
-            }
-            if (autoMockRequire(j, ast, dep)) {
-                return true;
-            }
-            return false;
-        })
-        .remove();
-}
+/**
+ * Transformations
+ */
 
-function autoMockImport(j, ast, dep) {
-    let foundImportedDep = false;
-    ast
-        .find(j.ImportDeclaration, {
-            specifiers: specifiers => {
-                return specifiers.some(s => s.local.name === dep);
-            },
-        })
-        .forEach(path => {
-            foundImportedDep = true;
-            // don't create the auto mock more than once
-            if (autoMockedDependencies.indexOf(dep) === -1) {
-                autoMockedDependencies.push(dep);
-                path.insertBefore(createJestMock(j, path.value.source));
-            }
-        });
-    return foundImportedDep;
-}
-
-function autoMockRequire(j, ast, dep) {
-    let foundRequiredDep = false;
-    ast
-        .find(j.VariableDeclaration, {
-            declarations: declarations => {
-                return declarations.some(dec => {
-                    return isRequireCall(dec, dep);
-                });
-            },
-        })
-        .forEach(path => {
-            const pathArg = path.value.declarations.reduce((acc, dec) => {
-                if (isRequireCall(dec, dep)) {
-                    return dec.init.arguments[0];
-                }
-                return acc;
-            }, false);
-            foundRequiredDep = true;
-            // don't create the auto mock more than once
-            if (autoMockedDependencies.indexOf(dep) === -1) {
-                autoMockedDependencies.push(dep);
-                path.insertBefore(createJestMock(j, pathArg));
-            }
-        });
-    return foundRequiredDep;
-}
-
+// sinon.mock() -> jest.fn()
 function transformSinonMock(j, ast) {
     ast
         .find(j.CallExpression, {
@@ -127,10 +61,15 @@ function transformSinonMock(j, ast) {
             },
         })
         .replaceWith(path => {
-            return j.callExpression(j.identifier('jest.fn'), []);
+            return createJestFn(j);
         });
 }
 
+/**
+ * There is no direct equivalent for sinon.stub in Jest
+ * so use jest.spyOn and 'mockReturnValue'
+ * e.g. sinon.stub(obj, 'method1') -> jest.spyOn(obj, 'method1').mockReturnValue(undefined);
+ */
 function transformStubCreation(j, ast) {
     ast
         .find(j.ExpressionStatement, {
@@ -143,6 +82,11 @@ function transformStubCreation(j, ast) {
             return j.expressionStatement(createJestSpyCall(j, path.value.expression));
         });
 
+    /*
+    * Find the sinon variables that specify return values after the fact e.g.
+    * var stub2 = sinon.stub(obj, 'method4');
+    * stub2.returns('bye').
+    */
     ast
         .find(j.VariableDeclarator, {
             init: {
@@ -151,7 +95,6 @@ function transformStubCreation(j, ast) {
             },
         })
         .replaceWith(path => {
-            // find the variables that specify return values e.g. stub2.returns('bye');
             ast
                 .find(j.CallExpression, {
                     callee: {
@@ -178,71 +121,7 @@ function transformStubCreation(j, ast) {
         });
 }
 
-function isSinonStubCall(callee) {
-    if (callee.object && callee.object.type === 'CallExpression') {
-        return isSinonStubCall(callee.object.callee);
-    }
-    if (
-        callee.type === 'MemberExpression' &&
-        callee.object.name === SINON &&
-        callee.property.name === 'stub'
-    ) {
-        return true;
-    }
-    return false;
-}
-
-function createJestSpyCall(j, callExpression) {
-    const callee = callExpression.callee;
-    const args = callExpression.arguments;
-    if (callee.object.type === 'CallExpression') {
-        if (callee.property && callee.property.name === 'returns') {
-            if (callee.object.arguments.length) {
-                return j.callExpression(
-                    j.memberExpression(
-                        j.callExpression(
-                            j.identifier('jest.spyOn'),
-                            callee.object.arguments
-                        ),
-                        j.identifier('mockReturnValue')
-                    ),
-                    args
-                );
-            } else {
-                return j.callExpression(
-                    j.memberExpression(createJestFn(j), j.identifier('mockReturnValue')),
-                    args
-                );
-            }
-        } else if (callee.property && callee.property.name === 'returnsArg') {
-            return j.callExpression(
-                j.memberExpression(
-                    j.callExpression(
-                        j.identifier('jest.spyOn'),
-                        callee.object.arguments
-                    ),
-                    j.identifier('mockImplementation')
-                ),
-                [j.arrowFunctionExpression(
-                    [j.restElement(j.identifier('args'))],
-                    j.memberExpression(j.identifier('args'), args[0])
-                )]
-            );
-        }
-    }
-    if (args.length) {
-        return j.callExpression(
-            j.memberExpression(
-                j.callExpression(j.identifier('jest.spyOn'), args),
-                j.identifier('mockReturnValue')
-            ),
-            [j.identifier('undefined')]
-        );
-    } else {
-        return createJestFn(j);
-    }
-}
-
+// spy.firstCall -> spy.mock.calls[0]
 function transformGetCallMethos(j, ast) {
     const getCallMethods = {
         firstCall: 'firstCall',
@@ -354,6 +233,7 @@ function transformGetCallMethos(j, ast) {
         });
 }
 
+// sinon.spy(object, 'method') -> jest.spyOn(object, 'method')
 function transformSpyCreation(j, ast) {
     ast
         .find(j.CallExpression, {
@@ -369,12 +249,9 @@ function transformSpyCreation(j, ast) {
         .replaceWith(path => {
             switch (path.value.arguments.length) {
                 case 0:
-                    return j.callExpression(j.identifier('jest.fn'), []);
+                    return createJestFn(j);
                 case 1:
-                    return j.callExpression(
-                        j.identifier('jest.fn'),
-                        path.value.arguments
-                    );
+                    return createJestFn(j, path.value.arguments);
                 case 2:
                     return j.callExpression(
                         j.identifier('jest.spyOn'),
@@ -386,8 +263,7 @@ function transformSpyCreation(j, ast) {
         });
 }
 
-const SINON_CALLED_WITH_METHODS = ['calledWith', 'notCalledWith'];
-
+//  expect(spy.calledWith(1, 2, 3)).toBe(true) -> expect(spy).toHaveBeenCalledWith(1, 2, 3);
 function transformCalledWithAssertions(j, ast) {
     ast
         .find(j.ExpressionStatement, {
@@ -429,16 +305,7 @@ function transformCalledWithAssertions(j, ast) {
         });
 }
 
-const TRUE_FALSE_MATCHERS = ['toBe', 'toBeTruthy', 'toBeFalsy'];
-const SINON_CALL_COUNT_METHODS = [
-    'called',
-    'calledOnce',
-    'notCalled',
-    'calledTwice',
-    'calledThrice',
-    'callCount',
-];
-
+//  expect(spy.called).toBe(true) -> expect(spy).toHaveBeenCalled()
 function transformCallCountAssertions(j, ast) {
     ast
         .find(j.ExpressionStatement, {
@@ -489,6 +356,24 @@ function transformCallCountAssertions(j, ast) {
         });
 }
 
+/**
+ * Helper Functions
+ */
+
+function isSinonStubCall(callee) {
+    if (callee.object && callee.object.type === 'CallExpression') {
+        return isSinonStubCall(callee.object.callee);
+    }
+    if (
+        callee.type === 'MemberExpression' &&
+        callee.object.name === SINON &&
+        callee.property.name === 'stub'
+    ) {
+        return true;
+    }
+    return false;
+}
+
 function isExpectSinonCall(obj, sinonMethods) {
     if (obj.type === 'CallExpression' && obj.callee.name === 'expect') {
         const args = obj.arguments;
@@ -520,14 +405,6 @@ function isExpectSinonObject(obj, sinonMethods) {
     }
 }
 
-function getExpectArg(obj) {
-    if (obj.type === 'MemberExpression') {
-        return getExpectArg(obj.object);
-    } else {
-        return obj.arguments[0];
-    }
-}
-
 function isExpectNegation(expectStatement) {
     const propName = expectStatement.expression.callee.property.name;
     const hasNot =
@@ -543,6 +420,64 @@ function isExpectNegation(expectStatement) {
     return hasNot || assertFalsy;
 }
 
+function createJestSpyCall(j, callExpression) {
+    const callee = callExpression.callee;
+    const args = callExpression.arguments;
+    if (callee.object.type === 'CallExpression') {
+        if (callee.property && callee.property.name === 'returns') {
+            if (callee.object.arguments.length) {
+                return j.callExpression(
+                    j.memberExpression(
+                        j.callExpression(
+                            j.identifier('jest.spyOn'),
+                            callee.object.arguments
+                        ),
+                        j.identifier('mockReturnValue')
+                    ),
+                    args
+                );
+            } else {
+                return j.callExpression(
+                    j.memberExpression(createJestFn(j), j.identifier('mockReturnValue')),
+                    args
+                );
+            }
+        } else if (callee.property && callee.property.name === 'returnsArg') {
+            return j.callExpression(
+                j.memberExpression(
+                    j.callExpression(j.identifier('jest.spyOn'), callee.object.arguments),
+                    j.identifier('mockImplementation')
+                ),
+                [
+                    j.arrowFunctionExpression(
+                        [j.restElement(j.identifier('args'))],
+                        j.memberExpression(j.identifier('args'), args[0])
+                    ),
+                ]
+            );
+        }
+    }
+    if (args.length) {
+        return j.callExpression(
+            j.memberExpression(
+                j.callExpression(j.identifier('jest.spyOn'), args),
+                j.identifier('mockReturnValue')
+            ),
+            [j.identifier('undefined')]
+        );
+    } else {
+        return createJestFn(j);
+    }
+}
+
+function getExpectArg(obj) {
+    if (obj.type === 'MemberExpression') {
+        return getExpectArg(obj.object);
+    } else {
+        return obj.arguments[0];
+    }
+}
+
 function createExpectStatement(j, expectArg, negation, assertMethod, assertArgs) {
     return j.expressionStatement(
         j.callExpression(
@@ -555,18 +490,6 @@ function createExpectStatement(j, expectArg, negation, assertMethod, assertArgs)
     );
 }
 
-function createJestMock(j, pathArg) {
-    return j.expressionStatement(j.callExpression(j.identifier('jest.mock'), [pathArg]));
-}
-
-function createJestFn(j) {
-    return j.callExpression(j.identifier('jest.fn'), []);
-}
-
-function isRequireCall(declaration, varName) {
-    return (
-        declaration.id.name === varName &&
-        declaration.init.type === 'CallExpression' &&
-        declaration.init.callee.name === 'require'
-    );
+function createJestFn(j, args = []) {
+    return j.callExpression(j.identifier('jest.fn'), args);
 }
