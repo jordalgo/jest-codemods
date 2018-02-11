@@ -214,6 +214,20 @@ function createJestSpyCall(j, callExpression) {
                     args
                 );
             }
+        } else if (callee.property && callee.property.name === 'returnsArg') {
+            return j.callExpression(
+                j.memberExpression(
+                    j.callExpression(
+                        j.identifier('jest.spyOn'),
+                        callee.object.arguments
+                    ),
+                    j.identifier('mockImplementation')
+                ),
+                [j.arrowFunctionExpression(
+                    [j.restElement(j.identifier('args'))],
+                    j.memberExpression(j.identifier('args'), args[0])
+                )]
+            );
         }
     }
     if (args.length) {

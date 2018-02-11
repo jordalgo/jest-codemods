@@ -23,6 +23,12 @@ function testChanged(msg, source, expectedOutput, options = {}) {
     });
 }
 
+// test('some jest thing', () => {
+//     var oG = { hello: () => 'hello' };
+//     jest.spyOn(oG, 'hello').mockImplementation(() => 'bye');
+//     expect(oG.hello()).toBe('bye');
+// });
+
 testChanged(
     'does not touch code without sinon require/import',
     `
@@ -94,6 +100,24 @@ testChanged(
         var stub3 = jest.fn();
         var stub4 = jest.fn().mockReturnValue('hello');
         stub2.mockReturnValue('bye');
+    });
+    `
+);
+
+testChanged(
+    'converts sinon.stub(object, "method").returnsArg',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+        sinon.stub(obj, 'method3').returnsArg(0);
+        sinon.stub(obj, 'method3').returnsArg(10);
+    });
+    `,
+    `
+    test(() => {
+        jest.spyOn(obj, 'method3').mockImplementation((...args) => args[0]);
+        jest.spyOn(obj, 'method3').mockImplementation((...args) => args[10]);
     });
     `
 );
