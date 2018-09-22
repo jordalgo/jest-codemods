@@ -111,17 +111,25 @@ testChanged(
 
     test(() => {
         sinon.stub(obj, 'method3').returnsArg(0);
+        var stub4 = sinon.stub().returnsArg(0);
         sinon.stub(obj, 'method3').returnsArg(10);
         sinon.stub(obj, 'method3').resolvesArg(10);
+        var stub4 = sinon.stub().resolvesArg(10);
         sinon.stub(obj, 'method3').throwsArg(10);
+        var stub4 = sinon.stub().throwsArg(10);
     });
     `,
     `
     test(() => {
         jest.spyOn(obj, 'method3').mockImplementation((...args) => args[0]);
+        var stub4 = jest.fn().mockImplementation((...args) => args[0]);
         jest.spyOn(obj, 'method3').mockImplementation((...args) => args[10]);
         jest.spyOn(obj, 'method3').mockImplementation((...args) => Promise.resolve(args[10]));
+        var stub4 = jest.fn().mockImplementation((...args) => Promise.resolve(args[10]));
         jest.spyOn(obj, 'method3').mockImplementation((...args) => {
+            throw args[10];
+        });
+        var stub4 = jest.fn().mockImplementation((...args) => {
             throw args[10];
         });
     });
@@ -135,9 +143,13 @@ testChanged(
 
     test(() => {
         sinon.stub(obj, 'method3').throws();
+        var stub4 = sinon.stub().throws();
         sinon.stub(obj, 'method3').throws(obj);
+        var stub4 = sinon.stub().throws(obj);
         sinon.stub(obj, 'method3').throws(function() { return new Error(); });
+        var stub4 = sinon.stub().throws(function() { return new Error(); });
         sinon.stub(obj, 'method3').throws(() => new Error());
+        var stub4 = sinon.stub().throws(() => new Error());
     });
     `,
     `
@@ -145,13 +157,25 @@ testChanged(
         jest.spyOn(obj, 'method3').mockImplementation(() => {
             throw Error();
         });
+        var stub4 = jest.fn().mockImplementation(() => {
+            throw Error();
+        });
         jest.spyOn(obj, 'method3').mockImplementation(() => {
+            throw obj;
+        });
+        var stub4 = jest.fn().mockImplementation(() => {
             throw obj;
         });
         jest.spyOn(obj, 'method3').mockImplementation(() => {
             throw function() { return new Error(); }();
         });
+        var stub4 = jest.fn().mockImplementation(() => {
+            throw function() { return new Error(); }();
+        });
         jest.spyOn(obj, 'method3').mockImplementation(() => {
+            throw (() => new Error())();
+        });
+        var stub4 = jest.fn().mockImplementation(() => {
             throw (() => new Error())();
         });
     });

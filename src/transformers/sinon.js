@@ -624,8 +624,8 @@ function createJestFn(j, args = []) {
 }
 
 function createJestSpyOn(j, args = []) {
-    return j.memberExpression(
-        j.callExpression(j.identifier('jest.spyOn'), args),
-        j.identifier('mockImplementation')
-    );
+    const call = args.length
+        ? j.callExpression(j.identifier('jest.spyOn'), args)
+        : createJestFn(j);
+    return j.memberExpression(call, j.identifier('mockImplementation'));
 }
