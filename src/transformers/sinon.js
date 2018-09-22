@@ -41,7 +41,6 @@ import finale from '../utils/finale';
    - resetBehavior (use 'mockReturnValue')
    - resetHistory (use 'mockReset')
    - callsFake
-   - throwsArg
    - callsArg
    - callThrough*
    - callsArgOn
@@ -538,6 +537,18 @@ function createJestSpyCall(j, callExpression) {
                     [j.restElement(j.identifier('args'))],
                     j.callExpression(j.identifier('Promise.resolve'), [
                         j.memberExpression(j.identifier('args'), args[0]),
+                    ])
+                ),
+            ]);
+        } else if (callee.property && callee.property.name === 'throwsArg') {
+            // Todo: add check for length of params to throw TypeError if arg is not available ()
+            return j.callExpression(createJestSpyOn(j, callee.object.arguments), [
+                j.arrowFunctionExpression(
+                    [j.restElement(j.identifier('args'))],
+                    j.blockStatement([
+                        j.throwStatement(
+                            j.memberExpression(j.identifier('args'), args[0])
+                        ),
                     ])
                 ),
             ]);
