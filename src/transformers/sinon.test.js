@@ -125,6 +125,36 @@ testChanged(
 );
 
 testChanged(
+    'converts sinon.stub(object, "method").throws',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+        sinon.stub(obj, 'method3').throws();
+        sinon.stub(obj, 'method3').throws(obj);
+        sinon.stub(obj, 'method3').throws(function() { return new Error(); });
+        sinon.stub(obj, 'method3').throws(() => new Error());
+    });
+    `,
+    `
+    test(() => {
+        jest.spyOn(obj, 'method3').mockImplementation(() => {
+            throw Error();
+        });
+        jest.spyOn(obj, 'method3').mockImplementation(() => {
+            throw obj;
+        });
+        jest.spyOn(obj, 'method3').mockImplementation(() => {
+            throw function() { return new Error(); }();
+        });
+        jest.spyOn(obj, 'method3').mockImplementation(() => {
+            throw (() => new Error())();
+        });
+    });
+    `
+);
+
+testChanged(
     'converts sinon.stub(object, "method").returnsThis',
     `
     import sinon from 'sinon';

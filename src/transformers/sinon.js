@@ -41,7 +41,6 @@ import finale from '../utils/finale';
    - resetBehavior (use 'mockReturnValue')
    - resetHistory (use 'mockReset')
    - callsFake
-   - throws
    - throwsArg
    - callsArg
    - callThrough*
@@ -527,33 +526,53 @@ function createJestSpyCall(j, callExpression) {
                 );
             }
         } else if (callee.property && callee.property.name === 'returnsArg') {
-            return j.callExpression(
-                j.memberExpression(
-                    j.callExpression(j.identifier('jest.spyOn'), callee.object.arguments),
-                    j.identifier('mockImplementation')
+            return j.callExpression(createJestSpyOn(j, callee.object.arguments), [
+                j.arrowFunctionExpression(
+                    [j.restElement(j.identifier('args'))],
+                    j.memberExpression(j.identifier('args'), args[0])
                 ),
-                [
-                    j.arrowFunctionExpression(
-                        [j.restElement(j.identifier('args'))],
-                        j.memberExpression(j.identifier('args'), args[0])
-                    ),
-                ]
-            );
+            ]);
         } else if (callee.property && callee.property.name === 'resolvesArg') {
-            return j.callExpression(
-                j.memberExpression(
-                    j.callExpression(j.identifier('jest.spyOn'), callee.object.arguments),
-                    j.identifier('mockImplementation')
+            return j.callExpression(createJestSpyOn(j, callee.object.arguments), [
+                j.arrowFunctionExpression(
+                    [j.restElement(j.identifier('args'))],
+                    j.callExpression(j.identifier('Promise.resolve'), [
+                        j.memberExpression(j.identifier('args'), args[0]),
+                    ])
                 ),
-                [
+            ]);
+        } else if (callee.property && callee.property.name === 'throws') {
+            if (args.length) {
+                const firstArg = args[0];
+                if (
+                    firstArg.type === 'FunctionExpression' ||
+                    firstArg.type === 'ArrowFunctionExpression'
+                ) {
+                    return j.callExpression(createJestSpyOn(j, callee.object.arguments), [
+                        j.arrowFunctionExpression(
+                            [],
+                            j.blockStatement([
+                                j.throwStatement(j.callExpression(firstArg, [])),
+                            ])
+                        ),
+                    ]);
+                }
+                return j.callExpression(createJestSpyOn(j, callee.object.arguments), [
                     j.arrowFunctionExpression(
-                        [j.restElement(j.identifier('args'))],
-                        j.callExpression(j.identifier('Promise.resolve'), [
-                            j.memberExpression(j.identifier('args'), args[0]),
+                        [],
+                        j.blockStatement([j.throwStatement(firstArg)])
+                    ),
+                ]);
+            } else {
+                return j.callExpression(createJestSpyOn(j, callee.object.arguments), [
+                    j.arrowFunctionExpression(
+                        [],
+                        j.blockStatement([
+                            j.throwStatement(j.callExpression(j.identifier('Error'), [])),
                         ])
                     ),
-                ]
-            );
+                ]);
+            }
         }
     }
     if (args.length) {
@@ -591,4 +610,11 @@ function createExpectStatement(j, expectArg, negation, assertMethod, assertArgs)
 
 function createJestFn(j, args = []) {
     return j.callExpression(j.identifier('jest.fn'), args);
+}
+
+function createJestSpyOn(j, args = []) {
+    return j.memberExpression(
+        j.callExpression(j.identifier('jest.spyOn'), args),
+        j.identifier('mockImplementation')
+    );
 }
