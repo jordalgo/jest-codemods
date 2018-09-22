@@ -4,6 +4,86 @@ import finale from '../utils/finale';
 
 // Todos: window functions should be global
 
+/*
+   These Sinon methods are not yet supported:
+   Spies:
+   - withArgs
+   - calledBefore*
+   - calledAfter*
+   - calledImmediatelyBefore*
+   - calledImmediatelyAfter*
+   - calledOn*
+   - alwaysCalledOn*
+   - calledOnceWith
+   - alwaysCalledWith*
+   - calledWithExactly*
+   - calledOnceWithExactly*
+   - alwaysCalledWithExactly*
+   - alwaysCalledWithMatch*
+   - calledWithNew*
+   - neverCalledWith*
+   - neverCalledWithMatch*
+   - threw* (not quite the same as toThrow)
+   - alwaysThrew*
+   - returned
+   - alwaysReturned*
+   - thisValues*
+   - returnValues (use 'results')
+   - exceptions (use 'results')
+   - resetHistory
+   - restore
+   Stubs:
+   - withArgs*
+   - onCall*
+   - onFirstCall*
+   - onSecondCall*
+   - onThirdCall*
+   - resetBehavior (use 'mockReturnValue')
+   - resetHistory (use 'mockReset')
+   - callsFake
+   - returnsThis
+   - resolves
+   - resolvesArg
+   - throws
+   - throwsArg
+   - rejects
+   - callsArg
+   - callThrough*
+   - callsArgOn
+   - callsArgWith
+   - callsArgOnWith
+   - usingPromise*^
+   - yields
+   - yieldsRight
+   - yieldsOn
+   - yieldsTo
+   - yieldsToOn
+   - yield*
+   - yieldTo*
+   - callArg
+   - callArgWith
+   - addBehavior*
+   - get*
+   - set*
+   - value*
+   Mocks:
+   - It seems like all the mock methods are set up to be expectations of what will happen once code is executed
+   but the Jest API checks after the fact e.g. 'toHaveBeen'. Probably would involve some fun codeshift trickery
+   to switch Sinon Mocks to Jest.
+
+   * No direct Jest equivalent
+   ^ Probably a method we don't need to duplicate
+
+   Below are all the API groups that have no support yet for any method
+   - Fake timers
+   - Fake XHR and server
+   - JSON-P
+   - Matchers
+   - Assertions
+   - Fakes (Probably can take a lot from stub and spy shifts)
+
+*/
+
 const SINON = 'sinon';
 const SINON_CALLED_WITH_METHODS = ['calledWith', 'notCalledWith'];
 const TRUE_FALSE_MATCHERS = ['toBe', 'toBeTruthy', 'toBeFalsy'];
@@ -420,11 +500,17 @@ function isExpectNegation(expectStatement) {
     return hasNot || assertFalsy;
 }
 
+const returnMap = {
+    returns: 'mockReturnValue',
+    returnsThis: 'mockReturnThis',
+};
+
 function createJestSpyCall(j, callExpression) {
     const callee = callExpression.callee;
     const args = callExpression.arguments;
     if (callee.object.type === 'CallExpression') {
-        if (callee.property && callee.property.name === 'returns') {
+        const jestReturn = returnMap[callee.property.name];
+        if (callee.property && jestReturn) {
             if (callee.object.arguments.length) {
                 return j.callExpression(
                     j.memberExpression(
@@ -432,13 +518,13 @@ function createJestSpyCall(j, callExpression) {
                             j.identifier('jest.spyOn'),
                             callee.object.arguments
                         ),
-                        j.identifier('mockReturnValue')
+                        j.identifier(jestReturn)
                     ),
                     args
                 );
             } else {
                 return j.callExpression(
-                    j.memberExpression(createJestFn(j), j.identifier('mockReturnValue')),
+                    j.memberExpression(createJestFn(j), j.identifier(jestReturn)),
                     args
                 );
             }

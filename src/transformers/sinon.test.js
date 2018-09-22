@@ -123,6 +123,24 @@ testChanged(
 );
 
 testChanged(
+    'converts sinon.stub(object, "method").returnsThis',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+        sinon.stub(obj, 'method3').returnsThis();
+        sinon.stub(obj, 'method3').returnsThis();
+    });
+    `,
+    `
+    test(() => {
+        jest.spyOn(obj, 'method3').mockReturnThis();
+        jest.spyOn(obj, 'method3').mockReturnThis();
+    });
+    `
+);
+
+testChanged(
     'converts sinon.spy(object, "method") to spyOn',
     `
     import sinon from 'sinon';
