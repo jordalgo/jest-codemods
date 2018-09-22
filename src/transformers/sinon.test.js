@@ -105,19 +105,21 @@ testChanged(
 );
 
 testChanged(
-    'converts sinon.stub(object, "method").returnsArg',
+    'converts sinon.stub(object, "method").returnsArg/resolvesArg',
     `
     import sinon from 'sinon';
 
     test(() => {
         sinon.stub(obj, 'method3').returnsArg(0);
         sinon.stub(obj, 'method3').returnsArg(10);
+        sinon.stub(obj, 'method3').resolvesArg(10);
     });
     `,
     `
     test(() => {
         jest.spyOn(obj, 'method3').mockImplementation((...args) => args[0]);
         jest.spyOn(obj, 'method3').mockImplementation((...args) => args[10]);
+        jest.spyOn(obj, 'method3').mockImplementation((...args) => Promise.resolve(args[10]));
     });
     `
 );
