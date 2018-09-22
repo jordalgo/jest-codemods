@@ -503,6 +503,8 @@ function isExpectNegation(expectStatement) {
 const returnMap = {
     returns: 'mockReturnValue',
     returnsThis: 'mockReturnThis',
+    resolves: 'mockResolvedValue',
+    rejects: 'mockRejectedValue',
 };
 
 function createJestSpyCall(j, callExpression) {

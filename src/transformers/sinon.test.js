@@ -129,13 +129,33 @@ testChanged(
 
     test(() => {
         sinon.stub(obj, 'method3').returnsThis();
-        sinon.stub(obj, 'method3').returnsThis();
     });
     `,
     `
     test(() => {
         jest.spyOn(obj, 'method3').mockReturnThis();
-        jest.spyOn(obj, 'method3').mockReturnThis();
+    });
+    `
+);
+
+testChanged(
+    'converts sinon.stub(object, "method").resolves/rejects',
+    `
+    import sinon from 'sinon';
+
+    test(() => {
+        sinon.stub(obj, 'method3').resolves(obj);
+        sinon.stub(obj, 'method3').rejects(error);
+        var stub4 = sinon.stub().resolves('hello');
+        var stub5 = sinon.stub().rejects('bye');
+    });
+    `,
+    `
+    test(() => {
+        jest.spyOn(obj, 'method3').mockResolvedValue(obj);
+        jest.spyOn(obj, 'method3').mockRejectedValue(error);
+        var stub4 = jest.fn().mockResolvedValue('hello');
+        var stub5 = jest.fn().mockRejectedValue('bye');
     });
     `
 );
