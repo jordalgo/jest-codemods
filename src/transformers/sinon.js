@@ -43,7 +43,6 @@ import finale from '../utils/finale';
    - callsFake
    - callThrough*
    - callsArgOn
-   - callsArgWith
    - callsArgOnWith
    - usingPromise*^
    - yields
@@ -53,8 +52,6 @@ import finale from '../utils/finale';
    - yieldsToOn
    - yield*
    - yieldTo*
-   - callArg
-   - callArgWith
    - addBehavior*
    - get*
    - set*
@@ -547,6 +544,15 @@ function createJestSpyCall(j, callExpression) {
                         j.memberExpression(j.identifier('args'), args[0]),
                         []
                     )
+                ),
+            ]);
+        } else if (callee.property && callee.property.name === 'callArgWith') {
+            return j.callExpression(createJestSpyOn(j, callee.object.arguments), [
+                j.arrowFunctionExpression(
+                    [j.restElement(j.identifier('args'))],
+                    j.callExpression(j.memberExpression(j.identifier('args'), args[0]), [
+                        j.spreadElement(args[1]),
+                    ])
                 ),
             ]);
         } else if (callee.property && callee.property.name === 'throwsArg') {
