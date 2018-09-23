@@ -41,7 +41,6 @@ import finale from '../utils/finale';
    - resetBehavior (use 'mockReturnValue')
    - resetHistory (use 'mockReset')
    - callsFake
-   - callsArg
    - callThrough*
    - callsArgOn
    - callsArgWith
@@ -538,6 +537,16 @@ function createJestSpyCall(j, callExpression) {
                     j.callExpression(j.identifier('Promise.resolve'), [
                         j.memberExpression(j.identifier('args'), args[0]),
                     ])
+                ),
+            ]);
+        } else if (callee.property && callee.property.name === 'callArg') {
+            return j.callExpression(createJestSpyOn(j, callee.object.arguments), [
+                j.arrowFunctionExpression(
+                    [j.restElement(j.identifier('args'))],
+                    j.callExpression(
+                        j.memberExpression(j.identifier('args'), args[0]),
+                        []
+                    )
                 ),
             ]);
         } else if (callee.property && callee.property.name === 'throwsArg') {
